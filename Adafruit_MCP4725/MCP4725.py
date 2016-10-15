@@ -24,6 +24,15 @@ import logging
 # Register values:
 WRITEDAC         = 0x40
 WRITEDACEEPROM   = 0x60
+WRITEFAST        = 0x00
+
+# power-down modes, using fast-mode command:
+# (see table 5-2 in datasheet, with table 6-2 for fast-mode)
+POWER_DOWN = {
+    1:   0x10, 
+    100: 0x20,
+    500: 0x30
+}
 
 # Default I2C address:
 DEFAULT_ADDRESS  = 0x62
@@ -66,3 +75,29 @@ class MCP4725(object):
             self._device.writeList(WRITEDACEEPROM, reg_data)
         else:
             self._device.writeList(WRITEDAC, reg_data)
+
+    def set_fast(self,value):
+        if value > 4095:
+            value = 4095
+        if value < 0:
+            value = 0
+        logging.debug('Setting value to {0:04}'.format(value))
+        # Make command, which includes part of value. 
+        # See datasheet figure 6-1
+        byte1 = value >> 8 # leave only the top 4 bits
+        byte1 |= WRITEFAST # include fast command
+        # make rest of command
+        byte2 = [value & 0xFF] # leave only the lower 8 bits
+        self._device.writeList(byte1,byte2)
+
+    def power_down(self,resistor=1):
+		# this puts device into sleep mode using the fast command
+        try:
+            mode = POWER_DOWN[resistor]
+        except KeyError:
+            raise KeyError('Accepted power-down values are 1, 100, and 500 kOhm.')
+        logging.debug('Shutting down with {0} kOhm resistor'.format(mode))
+        mode |= WRITEFAST
+        reg_data = [0x00]
+        self._device.writeList(mode,reg_data)
+        return resistor
